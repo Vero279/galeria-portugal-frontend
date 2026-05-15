@@ -10,7 +10,7 @@ export default function HomePage() {
   const slides = cities.map(city => ({
     id: city.slug,
     title: city.name,
-    subtitle: city.description,
+    subtitle: city.description ? city.description.replace(/<[^>]*>/g, '') : '',
     image_url: city.image_url,
   }));
 

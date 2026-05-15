@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { strapiAPI, getStrapiImageUrl } from '../services/strapi';
 import type { CartItem } from '../lib/types';
 import { logger } from '../utils/logger';
 
 export function useCart() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const getSessionId = () => {
     let sessionId = localStorage.getItem('session_id');
@@ -17,14 +18,26 @@ export function useCart() {
 
   const loadCart = useCallback(async () => {
     const sessionId = getSessionId();
-    const { data, error } = await supabase
-      .from('cart_items')
-      .select('*')
-      .eq('session_id', sessionId);
-    if (error) {
-      logger.error('loadCart error', error);
-    } else if (data) {
-      setCartItems(data);
+    setLoading(true);
+    try {
+      const items = await strapiAPI.getCollection<CartItem>(
+        'cart-items',
+        { 'filters[session_id][$eq]': sessionId },
+        'artwork',
+        true
+      );
+      const mapped = items.map(item => ({
+        ...item,
+        artwork: item.artwork ? {
+          ...item.artwork,
+          image_url: getStrapiImageUrl((item.artwork as any).image_url),
+        } : undefined,
+      }));
+      setCartItems(mapped);
+    } catch (err) {
+      logger.error('loadCart error', err);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -32,39 +45,28 @@ export function useCart() {
     loadCart();
   }, [loadCart]);
 
-  const addToCart = async (productId: string, quantity: number = 1) => {
+  const addToCart = async (artworkId: string, quantity: number = 1) => {
     const sessionId = getSessionId();
-    const existing = cartItems.find(item => item.product_id === productId);
-
-    if (existing) {
-      const { error } = await supabase
-        .from('cart_items')
-        .update({ quantity: existing.quantity + quantity })
-        .eq('id', existing.id);
-      if (error) {
-        logger.error('addToCart update error', error);
-        return;
+    const existing = cartItems.find(item => item.artwork_id === artworkId);
+    try {
+      if (existing) {
+        await strapiAPI.update('cart-items', existing.id, { quantity: existing.quantity + quantity });
+      } else {
+        await strapiAPI.create('cart-items', { session_id: sessionId, artwork: artworkId, quantity });
       }
       await loadCart();
-    } else {
-      const { error } = await supabase
-        .from('cart_items')
-        .insert({ session_id: sessionId, product_id: productId, quantity });
-      if (error) {
-        logger.error('addToCart insert error', error);
-        return;
-      }
-      await loadCart();
+    } catch (err) {
+      logger.error('addToCart error', err);
     }
   };
 
   const removeFromCart = async (cartItemId: string) => {
-    const { error } = await supabase.from('cart_items').delete().eq('id', cartItemId);
-    if (error) {
-      logger.error('removeFromCart error', error);
-      return;
+    try {
+      await strapiAPI.delete('cart-items', cartItemId);
+      await loadCart();
+    } catch (err) {
+      logger.error('removeFromCart error', err);
     }
-    await loadCart();
   };
 
   const updateQuantity = async (cartItemId: string, quantity: number) => {
@@ -72,23 +74,26 @@ export function useCart() {
       await removeFromCart(cartItemId);
       return;
     }
-    const { error } = await supabase.from('cart_items').update({ quantity }).eq('id', cartItemId);
-    if (error) {
-      logger.error('updateQuantity error', error);
-      return;
+    try {
+      await strapiAPI.update('cart-items', cartItemId, { quantity });
+      await loadCart();
+    } catch (err) {
+      logger.error('updateQuantity error', err);
     }
-    await loadCart();
   };
 
   const clearCart = async () => {
     const sessionId = getSessionId();
-    const { error } = await supabase.from('cart_items').delete().eq('session_id', sessionId);
-    if (error) {
-      logger.error('clearCart error', error);
-      return;
+    try {
+      const items = await strapiAPI.getCollection<CartItem>('cart-items', { 'filters[session_id][$eq]': sessionId }, '', true);
+      for (const item of items) {
+        await strapiAPI.delete('cart-items', item.id);
+      }
+      await loadCart();
+    } catch (err) {
+      logger.error('clearCart error', err);
     }
-    await loadCart();
   };
 
-  return { cartItems, addToCart, removeFromCart, updateQuantity, clearCart };
+  return { cartItems, loading, addToCart, removeFromCart, updateQuantity, clearCart };
 }

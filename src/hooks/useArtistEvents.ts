@@ -1,57 +1,47 @@
+// src/hooks/useArtistEvents.ts
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import type { ArtistEvent } from '../lib/types'; // define in types.ts later
+import { strapiAPI, getStrapiImageUrl } from '../services/strapi';
+import type { Event } from '../lib/types';
 import { logger } from '../utils/logger';
 
-// Extend type if needed (original had ArtistEvent interface)
-export interface ArtistEvent {
-  id: string;
-  title: string;
-  description: string;
-  event_date: string;
-  location: string;
-  image_url: string;
-  city_id?: string;
-  artist_id?: string;
-  city?: any;
-  artist?: any;
-}
-
 export function useArtistEvents(citySlug: string) {
-  const [events, setEvents] = useState<ArtistEvent[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!citySlug) return;
-    supabase
-      .from('cities')
-      .select('id')
-      .eq('slug', citySlug)
-      .maybeSingle()
-      .then(({ data: city, error: cityError }) => {
-        if (cityError) {
-          logger.error('useArtistEvents city fetch error', cityError);
+
+    const fetchEvents = async () => {
+      setLoading(true);
+      try {
+        const cityData = await strapiAPI.getBySlug<any>('cities', citySlug, 'slug', '');
+        if (!cityData) {
           setLoading(false);
           return;
         }
-        if (!city) {
-          setLoading(false);
-          return;
-        }
-        supabase
-          .from('artist_events')
-          .select('*')
-          .eq('city_id', city.id)
-          .order('event_date', { ascending: true })
-          .then(({ data, error }) => {
-            if (error) {
-              logger.error('useArtistEvents events fetch error', error);
-            } else if (data) {
-              setEvents(data);
-            }
-            setLoading(false);
-          });
-      });
+        const eventsData = await strapiAPI.getCollection<Event>(
+          'artist-events',
+          {
+            'filters[city][id][$eq]': cityData.id,
+            'filters[isPublished][$eq]': 'true',
+          },
+          ['city', 'artists'], 
+          true
+        );
+        const mapped = eventsData.map(ev => ({
+          ...ev,
+          image_url: getStrapiImageUrl(ev.image_url),
+          event_date: ev.event_date,
+        }));
+        mapped.sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
+        setEvents(mapped);
+      } catch (err) {
+        logger.error('useArtistEvents error', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEvents();
   }, [citySlug]);
 
   return { events, loading };

@@ -50,7 +50,7 @@ export interface City {
   slug: string;
   image_url: string;
   description: string;
-  is_published: boolean;
+  isPublished: boolean;
   created_at: string;
 }
 
@@ -63,7 +63,7 @@ export interface Artist {
   profile_image: string;
   cover_image: string;
   medium: string;
-  is_published: boolean;
+  isPublished: boolean;
   rating?: number;
   total_reviews?: number;
   created_at: string;
@@ -79,8 +79,10 @@ export interface Artwork {
   medium: string;
   dimensions: string;
   price: number;
+  isPublished: boolean;
   created_at: string;
   artist?: Artist;
+  description: any;
 }
 
 export interface Event {
@@ -94,7 +96,7 @@ export interface Event {
   image_url: string;
   created_at: string;
   city?: City;
-  artist?: Artist;
+  artists?: Artist[]; 
 }
 
 export interface Quiz {
@@ -119,28 +121,21 @@ export interface QuizQuestion {
   created_at: string;
 }
 
-export interface Product {
+export interface QuizAnswer {
   id: string;
-  artist_id?: string;
-  artwork_id?: string;
-  title: string;
-  description?: string;
-  image_url: string;
-  price: number;
-  category: string;
-  stock_quantity: number;
-  is_available: boolean;
+  quiz_id: string;
+  score: number;
+  session_id: string;
   created_at: string;
-  artist?: Artist;
 }
 
 export interface CartItem {
   id: string;
   session_id: string;
-  product_id: string;
+  artwork_id: string;
   quantity: number;
   added_at: string;
-  product?: Product;
+  artwork?: Artwork;
 }
 
 export interface Order {

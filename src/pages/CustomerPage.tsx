@@ -23,7 +23,7 @@ export default function CustomerPage() {
   });
 
   const cartTotal = cartItems.reduce((sum, item) => {
-    const price = item.product?.price || 0;
+    const price = item.artwork?.price || 0;
     return sum + (price * item.quantity);
   }, 0);
 
@@ -147,17 +147,17 @@ export default function CustomerPage() {
                       key={item.id}
                       className="flex gap-4 p-4 bg-white/5 border border-white/10 rounded-lg"
                     >
-                      {item.product?.image_url && (
+                      {item.artwork?.image_url && (
                         <img
-                          src={item.product.image_url}
-                          alt={item.product?.title}
+                          src={item.artwork.image_url}
+                          alt={item.artwork?.title}
                           className="w-24 h-24 object-cover rounded"
                         />
                       )}
 
                       <div className="flex-1">
-                        <h3 className="font-medium mb-1">{item.product?.title || 'Produto'}</h3>
-                        <p className="text-gray-400 text-sm mb-2">€{item.product?.price.toFixed(2) || '0.00'}</p>
+                        <h3 className="font-medium mb-1">{item.artwork?.title || 'Produto'}</h3>
+                        <p className="text-gray-400 text-sm mb-2">€{item.artwork?.price.toFixed(2) || '0.00'}</p>
 
                         <div className="flex items-center gap-2">
                           <button
@@ -178,7 +178,7 @@ export default function CustomerPage() {
 
                       <div className="text-right">
                         <p className="text-amber-400 font-light text-lg mb-2">
-                          €{((item.product?.price || 0) * item.quantity).toFixed(2)}
+                          €{((item.artwork?.price || 0) * item.quantity).toFixed(2)}
                         </p>
                         <button
                           onClick={() => removeFromCart(item.id)}

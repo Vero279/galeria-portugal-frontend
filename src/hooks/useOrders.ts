@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { strapiAPI } from '../services/strapi';
 import type { Order } from '../lib/types';
 import { logger } from '../utils/logger';
 
 export function useOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const getSessionId = () => {
     let sessionId = localStorage.getItem('session_id');
@@ -17,15 +18,14 @@ export function useOrders() {
 
   const loadOrders = useCallback(async () => {
     const sessionId = getSessionId();
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: false });
-    if (error) {
-      logger.error('loadOrders error', error);
-    } else if (data) {
+    setLoading(true);
+    try {
+      const data = await strapiAPI.getCollection<Order>('orders', { 'filters[session_id][$eq]': sessionId }, 'order_items', true);
       setOrders(data);
+    } catch (err) {
+      logger.error('loadOrders error', err);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -35,20 +35,15 @@ export function useOrders() {
 
   const createOrder = async (orderData: Omit<Order, 'id' | 'session_id' | 'created_at' | 'updated_at'>) => {
     const sessionId = getSessionId();
-    const { data: order, error } = await supabase
-      .from('orders')
-      .insert({ ...orderData, session_id: sessionId })
-      .select()
-      .maybeSingle();
-    if (error) {
-      logger.error('createOrder error', error);
+    try {
+      const newOrder = await strapiAPI.create<Order>('orders', { ...orderData, session_id: sessionId });
+      await loadOrders();
+      return newOrder;
+    } catch (err) {
+      logger.error('createOrder error', err);
       return null;
     }
-    if (order) {
-      await loadOrders();
-    }
-    return order;
   };
 
-  return { orders, createOrder, loadOrders };
+  return { orders, loading, createOrder, loadOrders };
 }

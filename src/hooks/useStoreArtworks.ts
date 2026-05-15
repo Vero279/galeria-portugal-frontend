@@ -3,7 +3,7 @@ import { strapiAPI, getStrapiImageUrl } from '../services/strapi';
 import type { Artwork } from '../lib/types';
 import { logger } from '../utils/logger';
 
-export function useAllArtworks() {
+export function useStoreArtworks() {
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -13,7 +13,10 @@ export function useAllArtworks() {
       try {
         const data = await strapiAPI.getCollection<Artwork>(
           'artworks',
-          { 'filters[isPublished][$eq]': 'true' }, // ← filtrar publicados
+          {
+            'filters[price][$gt]': '0',
+            'filters[isPublished][$eq]': 'true',
+          },
           'artist',
           true
         );
@@ -23,7 +26,7 @@ export function useAllArtworks() {
         }));
         setArtworks(mapped);
       } catch (err) {
-        logger.error('useAllArtworks error', err);
+        logger.error('useStoreArtworks error', err);
       } finally {
         setLoading(false);
       }

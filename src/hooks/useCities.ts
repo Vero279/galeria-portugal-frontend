@@ -10,7 +10,7 @@ function mapCity(item: any): City {
     slug: item.slug,
     image_url: getStrapiImageUrl(item.image_url),
     description: item.description,
-    is_published: item.is_published === true,
+    isPublished: item.isPublished === true,
     created_at: item.createdAt,
   };
 }
