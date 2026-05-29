@@ -172,15 +172,24 @@ export const strapiAPI = {
   async getCollection<T = any>(
     contentType: string,
     filters: Record<string, any> = {},
-    populate = '*',
-    publicOnly = true // New flag
+    populate: string | string[] = '*',
+    publicOnly = true
   ): Promise<T[]> {
     const queryParams = new URLSearchParams();
-    if (populate) queryParams.append('populate', populate);
-    queryParams.append('filters[is_published][$eq]', 'true');
+  
+    // Tratar populate (pode ser string ou array)
+    if (populate) {
+      if (Array.isArray(populate)) {
+        populate.forEach(p => queryParams.append('populate', p));
+      } else {
+        queryParams.append('populate', populate);
+      }
+    }
+  
     for (const [key, value] of Object.entries(filters)) {
       queryParams.append(key, String(value));
     }
+  
     const endpoint = `/${contentType}?${queryParams.toString()}`;
     try {
       return await fetchStrapi<T[]>(endpoint);
@@ -202,7 +211,7 @@ export const strapiAPI = {
     const query = new URLSearchParams({
       populate,
       [`filters[${field}][$eq]`]: slug,
-      'filters[is_published][$eq]': 'true',
+      'filters[isPublished][$eq]': 'true',
     });
     const endpoint = `/${contentType}?${query.toString()}`;
     const results = await fetchStrapi<T[]>(endpoint);
@@ -233,3 +242,87 @@ export const strapiAPI = {
     await fetchStrapi(`/${contentType}/${id}`, { method: 'DELETE' });
   },
 };
+
+// Upload de imagem para a biblioteca de media do Strapi
+export async function uploadImageToStrapi(file: File): Promise<string> {
+  const token = getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const formData = new FormData();
+  formData.append('files', file);
+
+  const response = await fetch(`${STRAPI_URL}/api/upload`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Upload failed');
+  }
+
+  const result = await response.json();
+  // Strapi returns array of uploaded files
+  const uploadedFile = result[0];
+  if (!uploadedFile || !uploadedFile.url) {
+    throw new Error('No file URL returned');
+  }
+  // Return full URL
+  return getStrapiImageUrl(uploadedFile.url);
+}
+
+// Criar uma nova obra associada ao artista autenticado
+export async function createArtwork(
+  data: {
+    title: string;
+    description?: string;
+    imageFile: File;
+    year?: number;
+    medium?: string;
+    dimensions?: string;
+    price?: number;
+  },
+  artistId: string
+) {
+  const token = getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+  const imageUrl = await uploadImageToStrapi(data.imageFile);
+  const payload = {
+    data: {
+      title: data.title,
+      description: data.description || null,   // ← adicionado
+      image_url: imageUrl,
+      year: data.year || null,
+      medium: data.medium || null,
+      dimensions: data.dimensions || null,
+      price: data.price || null,
+      artist: artistId,
+    },
+  };
+
+  // Se tivermos uma descrição, podemos criar/associar à tabela artwork_description.
+  // Para simplificar, vamos adicionar um campo description diretamente na obra
+  // (se o content-type tiver um campo description, use-o; caso contrário, ignore).
+  // Como o schema actual não tem description, deixamos apenas os campos existentes.
+  // Se houver relação com artwork_description, seria necessário criar um registo separado.
+
+  const response = await fetch(`${STRAPI_URL}/api/artworks`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to create artwork');
+  }
+
+  const result = await response.json();
+  return result.data;
+}
