@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { strapiAPI, getStrapiImageUrl } from '../services/strapi';
 import type { Artist, Artwork } from '../lib/types';
 import { logger } from '../utils/logger';
 
@@ -14,52 +14,55 @@ export function useArtist(artistSlug: string) {
 
   useEffect(() => {
     if (!artistSlug) return;
-    supabase
-      .from('artists')
-      .select('*')
-      .eq('slug', artistSlug)
-      .maybeSingle()
-      .then(({ data: artistData, error: artistError }) => {
-        if (artistError) {
-          logger.error('useArtist artist fetch error', artistError);
-          setLoading(false);
-          return;
-        }
+
+    const fetchArtist = async () => {
+      setLoading(true);
+      try {
+        // Buscar artista pelo slug (populando city)
+        const artistData = await strapiAPI.getBySlug<Artist & { city?: any }>(
+          'artists',
+          artistSlug,
+          'slug',
+          'city'
+        );
         if (!artistData) {
+          setArtist(null);
+          setArtworks([]);
           setLoading(false);
           return;
         }
-        setArtist(artistData);
-        supabase
-          .from('artworks')
-          .select('*')
-          .eq('artist_id', artistData.id)
-          .order('year', { ascending: false })
-          .then(async ({ data: artworksData, error: artworksError }) => {
-            if (artworksError) {
-              logger.error('useArtist artworks fetch error', artworksError);
-              setLoading(false);
-              return;
-            }
-            if (artworksData) {
-              const withDescriptions = await Promise.all(
-                artworksData.map(async (artwork) => {
-                  const { data: descData, error: descError } = await supabase
-                    .from('artwork_descriptions')
-                    .select('description')
-                    .eq('artwork_id', artwork.id)
-                    .maybeSingle();
-                  if (descError) {
-                    logger.warn(`Description fetch error for artwork ${artwork.id}`, descError);
-                  }
-                  return { ...artwork, description: descData?.description };
-                })
-              );
-              setArtworks(withDescriptions);
-            }
-            setLoading(false);
-          });
-      });
+        const mappedArtist: Artist = {
+          ...artistData,
+          profile_image: getStrapiImageUrl(artistData.profile_image),
+          cover_image: getStrapiImageUrl(artistData.cover_image),
+          city: artistData.city ? { ...artistData.city, image_url: getStrapiImageUrl(artistData.city.image_url) } : undefined,
+        };
+        setArtist(mappedArtist);
+
+        // Buscar obras do artista – agora sem artwork_description e com filtro is_published
+        const artworksData = await strapiAPI.getCollection<Artwork>(
+          'artworks',
+          {
+            'filters[artist][slug][$eq]': artistSlug,
+            'filters[isPublished][$eq]': 'true',   // ← adicionar o filtro manualmente
+          },
+          'artist',   // ← só precisa de popular o artista, não artwork_description
+          true
+        );
+        const mappedArtworks: ArtworkWithDescription[] = artworksData.map(aw => ({
+          ...aw,
+          image_url: getStrapiImageUrl(aw.image_url),
+          description: aw.description, // directo
+        }));
+        setArtworks(mappedArtworks);
+      } catch (err) {
+        logger.error('useArtist error', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchArtist();
   }, [artistSlug]);
 
   return { artist, artworks, loading };

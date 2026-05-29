@@ -1,5 +1,6 @@
+// src/hooks/useArtistQuiz.ts
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { strapiAPI } from '../services/strapi';
 import type { Quiz, QuizQuestion } from '../lib/types';
 import { logger } from '../utils/logger';
 
@@ -9,100 +10,80 @@ export function useArtistQuiz(artistSlug: string) {
 
   useEffect(() => {
     if (!artistSlug) return;
-    supabase
-      .from('artists')
-      .select('id')
-      .eq('slug', artistSlug)
-      .maybeSingle()
-      .then(({ data: artist, error: artistError }) => {
-        if (artistError) {
-          logger.error('useArtistQuiz artist error', artistError);
+
+    const fetchQuiz = async () => {
+      setLoading(true);
+      try {
+        const artistData = await strapiAPI.getBySlug<any>('artists', artistSlug, 'slug', '');
+        if (!artistData) {
           setLoading(false);
           return;
         }
-        if (!artist) {
+        const quizzes = await strapiAPI.getCollection<Quiz & { quiz_questions?: QuizQuestion[] }>(
+          'artist-quizzes',
+          { 'filters[artist][id][$eq]': artistData.id, 'filters[isPublished][$eq]': 'true' },
+          ['quiz_questions'],
+          true
+        );
+        if (quizzes.length === 0) {
+          setQuizData(null);
           setLoading(false);
           return;
         }
-        supabase
-          .from('artist_quizzes')
-          .select('*')
-          .eq('artist_id', artist.id)
-          .maybeSingle()
-          .then(({ data: quiz, error: quizError }) => {
-            if (quizError) {
-              logger.error('useArtistQuiz quiz fetch error', quizError);
-              setLoading(false);
-              return;
-            }
-            if (!quiz) {
-              setLoading(false);
-              return;
-            }
-            supabase
-              .from('quiz_questions')
-              .select('*')
-              .eq('quiz_id', quiz.id)
-              .then(({ data: questions, error: qError }) => {
-                if (qError) {
-                  logger.error('useArtistQuiz questions error', qError);
-                }
-                setQuizData({ ...quiz, quiz_questions: questions || [] });
-                setLoading(false);
-              });
-          });
-      });
+        setQuizData(quizzes[0]);
+      } catch (err) {
+        logger.error('useArtistQuiz error', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchQuiz();
   }, [artistSlug]);
 
   async function submitQuizAnswers(quizId: string, answers: Record<string, string>) {
     const sessionId = localStorage.getItem('session_id') || Math.random().toString(36).slice(2);
     localStorage.setItem('session_id', sessionId);
 
-    const { data: questions, error: qError } = await supabase
-      .from('quiz_questions')
-      .select('id, correct_answer')
-      .eq('quiz_id', quizId);
+    try {
+      const questions = await strapiAPI.getCollection<QuizQuestion>(
+        'quiz-questions',
+        { 'filters[artist_quiz][id][$eq]': quizId },
+        '',
+        true
+      );
+      if (!questions.length) return null;
 
-    if (qError) {
-      logger.error('submitQuizAnswers fetch questions error', qError);
-      return null;
-    }
-    if (!questions) return null;
+      let score = 0;
+      for (const q of questions) {
+        if (answers[q.id] === q.correct_answer) score++;
+      }
 
-    const score = Object.entries(answers).filter(([qId, answer]) => {
-      const q = questions.find((q: any) => q.id === qId);
-      return q && q.correct_answer === answer;
-    }).length;
-
-    const { data: insertData, error: insertError } = await supabase
-      .from('quiz_answers')
-      .insert({
-        quiz_id: quizId,
+      const result = await strapiAPI.create('quiz-answers', {
+        artist_quiz: quizId,
         session_id: sessionId,
         score,
         total_questions: questions.length,
-      })
-      .select()
-      .maybeSingle();
+      });
 
-    if (insertError) {
-      logger.error('submitQuizAnswers insert error', insertError);
-    }
-
-    if (score === questions.length && insertData) {
-      const artistId = quizData?.artist_id;
-      if (artistId) {
+      if (score === questions.length && result) {
         const discountCode = `ARTIST${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-        await supabase.from('user_discounts').insert({
-          session_id: sessionId,
-          artist_id: artistId,
-          discount_code: discountCode,
-          discount_percentage: 15,
-        });
+        const quizData = await strapiAPI.getById<any>('artist-quizzes', quizId, 'artist');
+        const artistId = quizData?.artist?.id;
+        if (artistId) {
+          await strapiAPI.create('user-discounts', {
+            session_id: sessionId,
+            artist: artistId,
+            discount_code: discountCode,
+            discount_percentage: 15,
+          });
+        }
       }
-    }
 
-    return { score, total: questions.length };
+      return { score, total: questions.length };
+    } catch (err) {
+      logger.error('submitQuizAnswers error', err);
+      return null;
+    }
   }
 
   return { quizData, loading, submitQuizAnswers };

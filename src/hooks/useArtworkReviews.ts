@@ -1,5 +1,6 @@
+// src/hooks/useArtworkReviews.ts
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { strapiAPI } from '../services/strapi';
 import { logger } from '../utils/logger';
 
 export function useArtworkReviews(artworkId: string) {
@@ -8,43 +9,53 @@ export function useArtworkReviews(artworkId: string) {
 
   useEffect(() => {
     if (!artworkId) return;
-    supabase
-      .from('artwork_reviews')
-      .select('rating')
-      .eq('artwork_id', artworkId)
-      .then(({ data, error }) => {
-        if (error) {
-          logger.error('useArtworkReviews fetch error', error);
-          return;
-        }
-        if (data && data.length > 0) {
-          const avg = data.reduce((sum, r) => sum + r.rating, 0) / data.length;
+
+    const fetchReviews = async () => {
+      try {
+        const reviews = await strapiAPI.getCollection<any>(
+          'artwork-reviews',
+          { 'filters[artwork][id][$eq]': artworkId },
+          '',
+          true
+        );
+        if (reviews.length > 0) {
+          const total = reviews.reduce((sum, r) => sum + r.rating, 0);
+          const avg = total / reviews.length;
           setRating(Math.round(avg * 10) / 10);
-          setReviewCount(data.length);
+          setReviewCount(reviews.length);
+        } else {
+          setRating(0);
+          setReviewCount(0);
         }
-      });
+      } catch (err) {
+        logger.error('useArtworkReviews fetch error', err);
+      }
+    };
+    fetchReviews();
   }, [artworkId]);
 
   async function submitReview(ratingValue: number, comment?: string) {
     const sessionId = localStorage.getItem('session_id') || Math.random().toString(36).slice(2);
     localStorage.setItem('session_id', sessionId);
 
-    const { error } = await supabase.from('artwork_reviews').insert({
-      artwork_id: artworkId,
-      session_id: sessionId,
-      rating: ratingValue,
-      comment,
-    });
+    try {
+      await strapiAPI.create('artwork-reviews', {
+        artwork: artworkId,
+        session_id: sessionId,
+        rating: ratingValue,
+        comment: comment || null,
+      });
 
-    if (error) {
-      logger.error('submitReview error', error);
+      // Actualizar localmente a média (optimista)
+      const newTotalRating = rating * reviewCount + ratingValue;
+      const newCount = reviewCount + 1;
+      setRating(Math.round((newTotalRating / newCount) * 10) / 10);
+      setReviewCount(newCount);
+      return true;
+    } catch (err) {
+      logger.error('submitReview error', err);
       return false;
     }
-
-    // Update local state optimistically
-    setRating(prev => (prev * reviewCount + ratingValue) / (reviewCount + 1));
-    setReviewCount(prev => prev + 1);
-    return true;
   }
 
   return { rating, reviewCount, submitReview };
