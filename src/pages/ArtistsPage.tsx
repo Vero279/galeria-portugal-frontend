@@ -4,6 +4,7 @@ import { MapPin, Palette, Star } from 'lucide-react';
 import { useAllArtists } from '../hooks/useAllArtists';
 import { useCities } from '../hooks/useCities';
 import { ROUTES } from '../lib/constants';
+import { renderRichText } from '../utils/richTextRenderer';
 
 export default function ArtistsPage() {
   const { artists, loading } = useAllArtists();
@@ -13,12 +14,12 @@ export default function ArtistsPage() {
 
   const filteredArtists = selectedCity === 'all'
     ? artists
-    : artists.filter(artist => artist.city_id === selectedCity);
+    : artists.filter(artist => String(artist.city?.id) === String(selectedCity));
 
   const cityOptions = [
     { id: 'all', name: 'Todas as Cidades' },
-    ...cities
-  ];
+      ...cities.map(city => ({ id: city.id, name: city.name }))
+    ];
 
   if (loading && artists.length === 0) {
     return (
@@ -27,7 +28,9 @@ export default function ArtistsPage() {
       </div>
     );
   }
-
+  console.log('Artists:', artists);
+  console.log('Cities:', cities);
+  console.log('Selected city ID:', selectedCity);
   return (
     <div className="min-h-screen bg-[#0d0d0d] pt-40 pb-12">
       <div className="max-w-7xl mx-auto px-8">
@@ -114,9 +117,9 @@ export default function ArtistsPage() {
                         <Palette size={12} />
                         {artist.medium}
                       </div>
-                      <p className="text-white/60 text-sm leading-relaxed line-clamp-3">
-                        {artist.bio}
-                      </p>
+                      <div className="text-white/60 text-sm leading-relaxed line-clamp-3">
+                        {renderRichText(artist.bio)}
+                      </div>
                       <button className="mt-4 w-full px-4 py-2 bg-amber-500 text-black text-xs tracking-[0.2em] uppercase hover:bg-amber-600 rounded transition-colors font-medium">
                         Explorar Obras
                       </button>

@@ -58,10 +58,10 @@ export default function QuizzesPage() {
                 </p>
 
                 <div className="space-y-2 mb-4 border-t border-white/10 pt-4">
-                  {(artist.total_reviews || 0) > 0 && (
+                  {artist.rating && artist.rating > 0 && (
                     <div className="flex items-center gap-2 text-white/60 text-xs">
                       <Trophy size={12} />
-                      <span>{artist.total_reviews} avaliação{(artist.total_reviews || 0) !== 1 ? 'ões' : ''}</span>
+                      <span>Avaliação: {artist.rating} ★</span>
                     </div>
                   )}
                   <div className="flex items-center gap-2 text-white/60 text-xs">

@@ -1,74 +1,64 @@
 import { useState } from 'react';
 import { Search, ShoppingCart, Filter } from 'lucide-react';
-import { useProducts } from '../hooks/useProducts';
-import type { Product } from '../lib/types';
+import { useStoreArtworks } from '../hooks/useStoreArtworks';
+import { useCart } from '../hooks/useCart';
+import type { Artwork } from '../lib/types';
+import { renderBlocks, renderRichText } from '../utils/richTextRenderer';
 
-interface ShopPageProps {
-  onAddToCart?: (product: Product, quantity: number) => void;
-}
-
-export default function ShopPage({ onAddToCart }: ShopPageProps) {
-  const { products } = useProducts();
+export default function ShopPage() {
+  const { artworks, loading } = useStoreArtworks();
+  const { addToCart } = useCart();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
-  const categories = ['all', 'artwork', 'merchandise', 'print', 'original'];
-  const maxPrice = Math.max(...products.map(p => p.price), 1000);
+  const categories = ['all', ...new Set(artworks.map(a => a.medium).filter(Boolean))];
+  const maxPrice = Math.max(...artworks.map(a => a.price), 1000);
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
-    const matchesPrice = product.price >= priceRange[0] && product.price <= priceRange[1];
+  const filteredArtworks = artworks.filter(artwork => {
+    const matchesSearch = artwork.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      artwork.artist?.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = selectedCategory === 'all' || artwork.medium === selectedCategory;
+    const matchesPrice = artwork.price >= priceRange[0] && artwork.price <= priceRange[1];
     return matchesSearch && matchesCategory && matchesPrice;
   });
 
-  const updateQuantity = (productId: string, quantity: number) => {
-    setQuantities(prev => ({
-      ...prev,
-      [productId]: quantity
-    }));
+  const updateQuantity = (artworkId: string, quantity: number) => {
+    setQuantities(prev => ({ ...prev, [artworkId]: quantity }));
   };
 
-  const handleAddToCart = (product: Product) => {
-    const quantity = quantities[product.id] || 1;
-    if (onAddToCart) {
-      onAddToCart(product, quantity);
-      setQuantities(prev => ({
-        ...prev,
-        [product.id]: 1
-      }));
-    }
+  const handleAddToCart = (artwork: Artwork) => {
+    const quantity = quantities[artwork.id] || 1;
+    addToCart(artwork.id, quantity);
+    setQuantities(prev => ({ ...prev, [artwork.id]: 1 }));
   };
+
+  if (loading) {
+    return <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center">A carregar...</div>;
+  }
 
   return (
     <main className="pt-32 pb-12 bg-[#0d0d0d] text-white min-h-screen">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="mb-8">
-          <h1 className="text-4xl font-light mb-2">Loja de Artes</h1>
-          <p className="text-gray-400">Adquira obras e produtos exclusivos de nossos artistas</p>
-        </div>
+        <h1 className="text-4xl font-light mb-2">Loja de Arte</h1>
+        <p className="text-gray-400 mb-8">Adquira obras originais dos nossos artistas</p>
 
+        {/* Filtros e pesquisa (igual ao original, mas sem categorias pré-definidas) */}
         <div className="mb-6 flex gap-2">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-3 text-gray-400" size={20} />
             <input
               type="text"
-              placeholder="Procure por título, artista..."
+              placeholder="Procure por título ou artista..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+              className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
             />
           </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 flex items-center gap-2 transition"
-          >
+          <button onClick={() => setShowFilters(!showFilters)} className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg">
             <Filter size={20} />
-            <span className="hidden sm:inline">Filtros</span>
           </button>
         </div>
 
@@ -76,125 +66,59 @@ export default function ShopPage({ onAddToCart }: ShopPageProps) {
           <div className="mb-6 p-4 bg-white/5 border border-white/10 rounded-lg">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h3 className="text-sm font-medium uppercase tracking-widest text-gray-300 mb-3">Categoria</h3>
+                <h3 className="text-sm uppercase tracking-widest mb-3">Técnica</h3>
                 <div className="flex flex-wrap gap-2">
                   {categories.map(cat => (
-                    <button
-                      key={cat}
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`px-3 py-1 rounded text-sm transition ${
-                        selectedCategory === cat
-                          ? 'bg-amber-500 text-black'
-                          : 'bg-white/10 text-white hover:bg-white/20'
-                      }`}
-                    >
-                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                    <button key={cat} onClick={() => setSelectedCategory(cat)}
+                      className={`px-3 py-1 rounded text-sm ${selectedCategory === cat ? 'bg-amber-500 text-black' : 'bg-white/10'}`}>
+                      {cat === 'all' ? 'Todas' : cat}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <h3 className="text-sm font-medium uppercase tracking-widest text-gray-300 mb-3">
-                  Preço: €{priceRange[0]} - €{priceRange[1]}
-                </h3>
-                <input
-                  type="range"
-                  min="0"
-                  max={maxPrice}
-                  value={priceRange[1]}
-                  onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
-                  className="w-full"
-                />
+                <h3 className="text-sm uppercase tracking-widest mb-3">Preço máx.: €{priceRange[1]}</h3>
+                <input type="range" min="0" max={maxPrice} value={priceRange[1]} onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])} className="w-full" />
               </div>
             </div>
           </div>
         )}
 
-        <p className="text-sm text-gray-400 mb-6">
-          Mostrando {filteredProducts.length} de {products.length} produtos
-        </p>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredProducts.map(product => (
-            <div
-              key={product.id}
-              className="group bg-white/5 border border-white/10 rounded-lg overflow-hidden hover:border-amber-500 transition flex flex-col"
-            >
-              <div className="relative overflow-hidden bg-black h-48 sm:h-56">
-                <img
-                  src={product.image_url}
-                  alt={product.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                />
-                {product.stock_quantity === 0 && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                    <span className="text-white font-medium">Esgotado</span>
+          {filteredArtworks.map(artwork => (
+            <div key={artwork.id} className="group bg-white/5 border border-white/10 rounded-lg overflow-hidden flex flex-col">
+              <div className="relative overflow-hidden h-56">
+                <img src={artwork.image_url} alt={artwork.title} className="w-full h-full object-cover group-hover:scale-105 transition" />
+              </div>
+              <div className="p-4 flex-1 flex flex-col">
+                <h3 className="font-medium mb-1">{artwork.title}</h3>
+                <p className="text-xs text-gray-400 mb-2">{artwork.artist?.name}</p>
+                {artwork.description && (
+                  <div className="text-xs text-gray-400 line-clamp-2">
+                    {typeof artwork.description === 'string' 
+                      ? renderRichText(artwork.description)
+                      : renderBlocks(artwork.description)}
                   </div>
                 )}
-              </div>
-
-              <div className="p-4 flex-1 flex flex-col">
-                <div className="mb-3">
-                  <p className="text-xs text-amber-400 uppercase tracking-widest mb-1">
-                    {product.category}
-                  </p>
-                  <h3 className="text-white font-medium mb-1 line-clamp-2">{product.title}</h3>
-                  {product.description && (
-                    <p className="text-xs text-gray-400 line-clamp-2">{product.description}</p>
-                  )}
-                </div>
-
                 <div className="mt-auto">
-                  <p className="text-2xl font-light text-amber-400 mb-4">€{product.price.toFixed(2)}</p>
-
+                  <p className="text-2xl font-light text-amber-400 mb-4">€{artwork.price.toFixed(2)}</p>
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-sm text-gray-400">Qtd:</span>
                     <div className="flex items-center border border-white/10 rounded">
-                      <button
-                        onClick={() => updateQuantity(product.id, Math.max(1, (quantities[product.id] || 1) - 1))}
-                        className="px-2 py-1 hover:bg-white/10 transition"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        min="1"
-                        value={quantities[product.id] || 1}
-                        onChange={(e) => updateQuantity(product.id, Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-10 text-center bg-transparent outline-none"
-                      />
-                      <button
-                        onClick={() => updateQuantity(product.id, (quantities[product.id] || 1) + 1)}
-                        className="px-2 py-1 hover:bg-white/10 transition"
-                      >
-                        +
-                      </button>
+                      <button onClick={() => updateQuantity(artwork.id, Math.max(1, (quantities[artwork.id] || 1) - 1))} className="px-2 py-1">−</button>
+                      <input type="number" min="1" value={quantities[artwork.id] || 1} onChange={(e) => updateQuantity(artwork.id, Math.max(1, parseInt(e.target.value) || 1))} className="w-10 text-center bg-transparent outline-none" />
+                      <button onClick={() => updateQuantity(artwork.id, (quantities[artwork.id] || 1) + 1)} className="px-2 py-1">+</button>
                     </div>
                   </div>
-
-                  <button
-                    onClick={() => handleAddToCart(product)}
-                    disabled={product.stock_quantity === 0}
-                    className={`w-full py-2 rounded transitio flex items-center justify-center gap-2 font-light ${
-                      product.stock_quantity === 0
-                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                        : 'bg-amber-500 text-black hover:bg-amber-600'
-                    }`}
-                  >
-                    <ShoppingCart size={18} />
-                    Carrinho
+                  <button onClick={() => handleAddToCart(artwork)} className="w-full py-2 bg-amber-500 text-black rounded flex items-center justify-center gap-2">
+                    <ShoppingCart size={18} /> Carrinho
                   </button>
                 </div>
               </div>
             </div>
           ))}
         </div>
-
-        {filteredProducts.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-400 text-lg">Nenhum produto encontrado</p>
-          </div>
-        )}
+        {filteredArtworks.length === 0 && <p className="text-center py-12 text-gray-400">Nenhuma obra disponível.</p>}
       </div>
     </main>
   );
