@@ -128,11 +128,12 @@ export default function Navbar() {
                     )}
                     <Link
                       to={ROUTES.CONTACT}
+                      state={{ name: user?.name, email: user?.email }}
                       onClick={() => setShowUserDropdown(false)}
                       className="flex items-center gap-3 px-4 py-2 text-sm text-white/70 hover:bg-white/10 transition-colors"
                     >
                       <Settings size={16} />
-                      Configurações
+                      Ajuda
                     </Link>
                     <button
                       onClick={handleLogout}

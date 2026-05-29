@@ -1,8 +1,9 @@
 import { Calendar, MapPin } from 'lucide-react';
-import type { ArtistEvent } from '../../hooks/useArtistEvents';
+import type { Event } from '../../lib/types';
+import { renderRichText } from '../../utils/richTextRenderer';
 
 interface EventsListProps {
-  events: ArtistEvent[];
+  events: Event[];
 }
 
 export default function EventsList({ events }: EventsListProps) {
@@ -47,6 +48,13 @@ export default function EventsList({ events }: EventsListProps) {
                 {event.title}
               </h3>
 
+              {/* Exibir lista de artistas (many‑to‑many) */}
+              {event.artists && event.artists.length > 0 && (
+                <div className="text-white/40 text-xs mb-2">
+                  Com {event.artists.map(a => a.name).join(', ')}
+                </div>
+              )}
+
               <div className="space-y-2 text-xs text-white/50">
                 <div className="flex items-start gap-2">
                   <Calendar size={12} className="mt-0.5 flex-shrink-0" />
@@ -68,9 +76,9 @@ export default function EventsList({ events }: EventsListProps) {
               </div>
 
               {event.description && (
-                <p className="text-white/40 text-xs mt-3 leading-relaxed">
-                  {event.description.substring(0, 80)}...
-                </p>
+                <div className="text-white/40 text-xs mt-3 leading-relaxed">
+                  {renderRichText(event.description.substring(0, 80) + '...')}
+                </div>
               )}
 
               <button className="w-full mt-4 px-3 py-2 border border-white/20 text-white/60 text-xs tracking-widest uppercase hover:border-white/50 hover:text-white transition-colors">

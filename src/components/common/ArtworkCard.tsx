@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Star } from 'lucide-react';
 import { useArtworkReviews } from '../../hooks/useArtworkReviews';
 import type { Artwork } from '../../lib/types';
+import { renderBlocks, renderRichText } from '../../utils/richTextRenderer';
 
 interface ArtworkCardProps {
   artwork: Artwork & { description?: string };
@@ -45,7 +46,11 @@ export default function ArtworkCard({ artwork, onExperiment }: ArtworkCardProps)
           <p className="text-white/40 text-xs mt-0.5">{artwork.dimensions}</p>
 
           {artwork.description && (
-            <p className="text-white/60 text-xs mt-4 leading-relaxed">{artwork.description}</p>
+            <div className="text-white/60 text-xs mt-4 leading-relaxed">
+              {typeof artwork.description === 'string' 
+                ? renderRichText(artwork.description)
+                : renderBlocks(artwork.description)}
+            </div>
           )}
 
           <div className="flex items-center gap-2 mt-4">
